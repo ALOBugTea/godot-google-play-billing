@@ -31,9 +31,9 @@
 package org.godotengine.godot.plugin.googleplaybilling.utils;
 
 import org.godotengine.godot.Dictionary;
-
+import com.android.billingclient.api.BillingClient;
 import com.android.billingclient.api.Purchase;
-import com.android.billingclient.api.SkuDetails;
+import com.android.billingclient.api.ProductDetails;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -49,37 +49,61 @@ public class GooglePlayBillingUtils {
 		dictionary.put("purchase_token", purchase.getPurchaseToken());
 		dictionary.put("quantity", purchase.getQuantity());
 		dictionary.put("signature", purchase.getSignature());
-		// PBL V4 replaced getSku with getSkus to support multi-sku purchases,
-		// use the first entry for "sku" and generate an array for "skus"
-		ArrayList<String> skus = purchase.getSkus();
-		dictionary.put("sku", skus.get(0));
-		String[] skusArray = skus.toArray(new String[0]);
-		dictionary.put("skus", skusArray);
+		List<String> products = purchase.getProducts();
+		dictionary.put("product", products.get(0));
+		String[] productsArray = products.toArray(new String[0]);
+		dictionary.put("products", productsArray);
 		dictionary.put("is_acknowledged", purchase.isAcknowledged());
 		dictionary.put("is_auto_renewing", purchase.isAutoRenewing());
 		return dictionary;
 	}
 
-	public static Dictionary convertSkuDetailsToDictionary(SkuDetails details) {
+	public static Dictionary convertProductDetailsToDictionary(ProductDetails details) {
 		Dictionary dictionary = new Dictionary();
-		dictionary.put("sku", details.getSku());
-		dictionary.put("title", details.getTitle());
-		dictionary.put("description", details.getDescription());
-		dictionary.put("price", details.getPrice());
-		dictionary.put("price_currency_code", details.getPriceCurrencyCode());
-		dictionary.put("price_amount_micros", details.getPriceAmountMicros());
-		dictionary.put("free_trial_period", details.getFreeTrialPeriod());
-		dictionary.put("icon_url", details.getIconUrl());
-		dictionary.put("introductory_price", details.getIntroductoryPrice());
-		dictionary.put("introductory_price_amount_micros", details.getIntroductoryPriceAmountMicros());
-		dictionary.put("introductory_price_cycles", details.getIntroductoryPriceCycles());
-		dictionary.put("introductory_price_period", details.getIntroductoryPricePeriod());
-		dictionary.put("original_price", details.getOriginalPrice());
-		dictionary.put("original_price_amount_micros", details.getOriginalPriceAmountMicros());
-		dictionary.put("subscription_period", details.getSubscriptionPeriod());
-		dictionary.put("type", details.getType());
+		dictionary.put("product_id", details.getProductId()); 
+		dictionary.put("product_name", details.getName());
+		dictionary.put("product_title", details.getTitle());
+		dictionary.put("product_description", details.getDescription());
+		dictionary.put("product_type", details.getProductType());
+		if (details.getSubscriptionOfferDetails() != null) { 
+			List<ProductDetails.SubscriptionOfferDetails> subDetailsList = details.getSubscriptionOfferDetails();
+				Dictionary subDict = new Dictionary();
+				for (ProductDetails.SubscriptionOfferDetails subDetails : subDetailsList) {
+					Dictionary subDetailsDict = new Dictionary();
+					subDetailsDict.put("baseplan_id", subDetails.getBasePlanId());
+					subDetailsDict.put("offer_id", subDetails.getOfferId());
+					subDetailsDict.put("offer_token", subDetails.getOfferToken());
+					subDetailsDict.put("offer_tags", subDetails.getOfferTags());
+					Dictionary pricingPhasesDict = new Dictionary();
+					List<ProductDetails.PricingPhase> pricingPhases = subDetails.getPricingPhases().getPricingPhaseList();
+					int phase = 0;
+					for(ProductDetails.PricingPhase ph : pricingPhases) {
+						phase += 1;
+						Dictionary phDetailsDict = new Dictionary();
+						phDetailsDict.put("billing_cycle_count", ph.getBillingCycleCount());
+						phDetailsDict.put("billing_period", ph.getBillingPeriod());
+						phDetailsDict.put("billing_price_formatted", ph.getFormattedPrice());
+						phDetailsDict.put("billing_price_amount_micros", ph.getPriceAmountMicros());
+						phDetailsDict.put("billing_price_currency_codes", ph.getPriceCurrencyCode());
+						phDetailsDict.put("billing_recurrence_mode", ph.getRecurrenceMode());
+						phDetailsDict.put("billing_recurrence_mode_hint", GooglePlayBillingUtils.recurrenceModeHintGet(ph.getRecurrenceMode()));
+						pricingPhasesDict.put("pricing_phase_" + String.valueOf(phase), phDetailsDict);
+					}
+					subDetailsDict.put("offer_pricing_phases", pricingPhasesDict);
+					subDict.put(subDetails.getBasePlanId(), subDetailsDict);
+				}
+				dictionary.put("product_subs", subDict);
+		}
+		Dictionary otpoDict = new Dictionary();
+		ProductDetails.OneTimePurchaseOfferDetails otpoDetails = details.getOneTimePurchaseOfferDetails();
+		otpoDict.put("billing_price_formatted", otpoDetails.getFormattedPrice());
+		otpoDict.put("billing_price_amount_micros", otpoDetails.getPriceAmountMicros());
+		otpoDict.put("billing_price_currency_codes", otpoDetails.getPriceCurrencyCode());
+		dictionary.put("product_one_time_purchase_offer", otpoDict);
+		
 		return dictionary;
 	}
+
 
 	public static Object[] convertPurchaseListToDictionaryObjectArray(List<Purchase> purchases) {
 		Object[] purchaseDictionaries = new Object[purchases.size()];
@@ -91,13 +115,105 @@ public class GooglePlayBillingUtils {
 		return purchaseDictionaries;
 	}
 
-	public static Object[] convertSkuDetailsListToDictionaryObjectArray(List<SkuDetails> skuDetails) {
-		Object[] skuDetailsDictionaries = new Object[skuDetails.size()];
-
-		for (int i = 0; i < skuDetails.size(); i++) {
-			skuDetailsDictionaries[i] = GooglePlayBillingUtils.convertSkuDetailsToDictionary(skuDetails.get(i));
+	public static Object[] convertProductDetailsListToDictionaryObjectArray(List<ProductDetails> pDetails) {
+		Object[] pDetailsDictionaries = new Object[pDetails.size()];
+		for (int i = 0; i < pDetails.size(); i++) {
+			pDetailsDictionaries[i] = GooglePlayBillingUtils.convertProductDetailsToDictionary(pDetails.get(i));
 		}
-
-		return skuDetailsDictionaries;
+		return pDetailsDictionaries;
 	}
+
+
+	public static String responseCodeHint(int response_code) {
+		switch (response_code){
+			case BillingClient.BillingResponseCode.BILLING_UNAVAILABLE:
+				return "BILLING_UNAVAILABLE";
+			case BillingClient.BillingResponseCode.DEVELOPER_ERROR:
+				return "DEVELOPER_ERROR";
+			case BillingClient.BillingResponseCode.ERROR:
+				return "ERROR";
+			case BillingClient.BillingResponseCode.FEATURE_NOT_SUPPORTED:
+				return "FEATURE_NOT_SUPPORTED";
+			case BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED:
+				return "ITEM_ALREADY_OWNED";
+			case BillingClient.BillingResponseCode.ITEM_NOT_OWNED:
+				return "ITEM_NOT_OWNED";
+			case BillingClient.BillingResponseCode.ITEM_UNAVAILABLE:
+				return "ITEM_UNAVAILABLE";
+			case BillingClient.BillingResponseCode.NETWORK_ERROR:
+				return "NETWORK_ERROR";
+			case BillingClient.BillingResponseCode.OK:
+				return "OK";
+			case BillingClient.BillingResponseCode.SERVICE_DISCONNECTED:
+				return "SERVICE_DISCONNECTED";
+			case BillingClient.BillingResponseCode.SERVICE_TIMEOUT:
+				return "SERVICE_TIMEOUT";
+			case BillingClient.BillingResponseCode.SERVICE_UNAVAILABLE:
+				return "SERVICE_UNAVAILABLE";
+			case BillingClient.BillingResponseCode.USER_CANCELED:
+				return "USER_CANCELED";
+		}
+		return "Unsupported response code!";
+	}
+
+	public static int responseCodeHintToCode(String response_code_hint) {
+		switch (response_code_hint){
+			case "BILLING_UNAVAILABLE":
+				return BillingClient.BillingResponseCode.BILLING_UNAVAILABLE;
+			case "DEVELOPER_ERROR":
+				return BillingClient.BillingResponseCode.DEVELOPER_ERROR;
+			case "ERROR":
+				return BillingClient.BillingResponseCode.ERROR;
+			case "FEATURE_NOT_SUPPORTED":
+				return BillingClient.BillingResponseCode.FEATURE_NOT_SUPPORTED;
+			case "ITEM_ALREADY_OWNED":
+				return BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED;
+			case "ITEM_NOT_OWNED":
+				return BillingClient.BillingResponseCode.ITEM_NOT_OWNED;
+			case "ITEM_UNAVAILABLE":
+				return BillingClient.BillingResponseCode.ITEM_UNAVAILABLE;
+			case "NETWORK_ERROR":
+				return BillingClient.BillingResponseCode.NETWORK_ERROR;
+			case "OK":
+				return BillingClient.BillingResponseCode.OK;
+			case "SERVICE_DISCONNECTED":
+				return BillingClient.BillingResponseCode.SERVICE_DISCONNECTED;
+			case "SERVICE_TIMEOUT":
+				return BillingClient.BillingResponseCode.SERVICE_TIMEOUT;
+			case "SERVICE_UNAVAILABLE":
+				return BillingClient.BillingResponseCode.SERVICE_UNAVAILABLE;
+			case "USER_CANCELED":
+				return BillingClient.BillingResponseCode.USER_CANCELED;
+		}
+		return BillingClient.BillingResponseCode.ERROR;
+	}
+
+	public static String recurrenceModeHintGet(int rm) {
+		// RecurrenceMode means:
+		// https://developer.android.com/reference/com/android/billingclient/api/ProductDetails.RecurrenceMode
+		// FINITE_RECURRING
+		// > The billing plan payment recurs for a fixed number of billing period set in billingCycleCount.
+		// INFINITE_RECURRING
+		// > The billing plan payment recurs for infinite billing periods unless cancelled.
+		// NON_RECURRING
+		// > The billing plan payment is a one time charge that does not repeat.
+		if (rm == ProductDetails.RecurrenceMode.FINITE_RECURRING)
+			return "FINITE_RECURRING";
+		if (rm == ProductDetails.RecurrenceMode.INFINITE_RECURRING)
+			return "INFINITE_RECURRING";
+		if (rm == ProductDetails.RecurrenceMode.NON_RECURRING)
+			return "NON_RECURRING";
+		return "Not supported recurrence mode";
+	}
+
+	public static Integer recurrenceModeHintStringToInt(String hint) {
+		if (hint == "FINITE_RECURRING")
+			return ProductDetails.RecurrenceMode.FINITE_RECURRING;
+		if (hint == "INFINITE_RECURRING")
+			return ProductDetails.RecurrenceMode.INFINITE_RECURRING;
+		if (hint == "NON_RECURRING")
+			return ProductDetails.RecurrenceMode.NON_RECURRING;
+		return ProductDetails.RecurrenceMode.NON_RECURRING;
+	}
+
 }
