@@ -313,7 +313,7 @@ public class GodotGooglePlayBilling extends GodotPlugin implements PurchasesUpda
 		// if product is not supported in user phone, will change format to querySkuDetails
 		// PriceChange not longer available to developer, deleted
 		// comfirmPriceChange
-		return Arrays.asList("startConnection", "endConnection", "purchase", "updateSubscription", "querySkuDetails", "queryProductDetails", "isReady", "getConnectionState", "queryPurchases", "acknowledgePurchase", "consumePurchase", "setObfuscatedAccountId", "setObfuscatedProfileId");
+		return Arrays.asList("startConnection", "endConnection", "purchase", "updateSubscription", "queryProductDetails", "isReady", "getConnectionState", "queryPurchases", "acknowledgePurchase", "consumePurchase", "setObfuscatedAccountId", "setObfuscatedProfileId");
 	}
 
 	@NonNull
